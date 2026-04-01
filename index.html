@@ -189,6 +189,20 @@
         <span style="color:#8b949e;font-size:14px;">Connecting to database…</span>
     </div>
 
+    <!-- Password modal -->
+    <div class="modal-overlay active" id="password-modal">
+        <div class="modal" style="max-width:320px;text-align:center;">
+            <h2 style="margin-bottom:8px;">🔐 Task Manager</h2>
+            <p style="font-size:13px;color:#8b949e;margin-bottom:20px;">Enter password to continue</p>
+            <div class="form-group" style="text-align:left;">
+                <input type="password" id="password-input" placeholder="Password…" style="width:100%;"
+                    onkeydown="if(event.key==='Enter')checkPassword()">
+            </div>
+            <p id="password-error" style="color:#f85149;font-size:12px;min-height:16px;margin-bottom:8px;"></p>
+            <button class="btn-save" style="width:100%;padding:10px;" onclick="checkPassword()">Enter</button>
+        </div>
+    </div>
+
     <!-- Identity modal -->
     <div class="modal-overlay" id="identity-modal">
         <div class="modal" style="max-width:320px;text-align:center;">
@@ -309,6 +323,27 @@
 
         const allClients = ['2friends','DeltaHub','FJN d.o.o.','Komunala','NutriSolution',
             'Provantis','Sensilab','Vantis','Vendio','Vitapur AI','Vitapur Amazon','Vitapur B2B'];
+
+        // ─── Password gate ───────────────────────────────────────────────
+        const PASSWORD_HASH = 'e402d6991a420338a69ce4d8ef57d02d81973236f48500ce9e381e24d48f4d74';
+
+        async function checkPassword() {
+            const input = document.getElementById('password-input').value;
+            const msgBuffer = new TextEncoder().encode(input);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+            if (hashHex === PASSWORD_HASH) {
+                sessionStorage.setItem('tm_auth', '1');
+                document.getElementById('password-modal').classList.remove('active');
+                const saved = localStorage.getItem('taskmanager_user');
+                if (saved) { setIdentity(saved); }
+                else { document.getElementById('identity-modal').classList.add('active'); }
+            } else {
+                document.getElementById('password-error').textContent = 'Incorrect password. Try again.';
+                document.getElementById('password-input').value = '';
+            }
+        }
 
         // ─── Identity ────────────────────────────────────────────────────────
         function setIdentity(name) {
@@ -607,12 +642,15 @@
 
         // ─── Boot ─────────────────────────────────────────────────────────────
         window.addEventListener('DOMContentLoaded', () => {
-            const saved = localStorage.getItem('taskmanager_user');
-            if (saved) {
-                setIdentity(saved);
+            document.getElementById('loading-overlay').style.display = 'none';
+            if (sessionStorage.getItem('tm_auth') === '1') {
+                document.getElementById('password-modal').classList.remove('active');
+                const saved = localStorage.getItem('taskmanager_user');
+                if (saved) { setIdentity(saved); }
+                else { document.getElementById('identity-modal').classList.add('active'); }
             } else {
-                document.getElementById('loading-overlay').style.display = 'none';
-                document.getElementById('identity-modal').classList.add('active');
+                document.getElementById('password-modal').classList.add('active');
+                setTimeout(() => document.getElementById('password-input').focus(), 100);
             }
         });
     </script>
