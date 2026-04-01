@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Manager</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f1117;
+            color: #e1e4e8;
+            min-height: 100vh;
+        }
+        header {
+            background: #161b22;
+            padding: 16px 32px;
+            border-bottom: 1px solid #30363d;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        header h1 { font-size: 22px; font-weight: 600; color: #f0f6fc; }
+        .header-right { display: flex; align-items: center; gap: 12px; }
+        .switch-user-link { font-size: 12px; color: #8b949e; cursor: pointer; text-decoration: underline; }
+        .switch-user-link:hover { color: #58a6ff; }
+        .btn-add {
+            background: #238636; color: #fff; border: none;
+            padding: 8px 16px; border-radius: 6px; font-size: 14px;
+            font-weight: 500; cursor: pointer; transition: background 0.2s;
+        }
+        .btn-add:hover { background: #2ea043; }
+        .board {
+            display: grid; grid-template-columns: 1fr 1fr 1fr;
+            gap: 20px; padding: 24px 32px; max-width: 1400px; margin: 0 auto;
+        }
+        .column {
+            background: #161b22; border-radius: 10px;
+            border: 1px solid #30363d; min-height: 70vh;
+        }
+        .column-header {
+            padding: 16px 20px; border-bottom: 1px solid #30363d;
+            display: flex; align-items: center; gap: 10px;
+            font-weight: 600; font-size: 15px;
+        }
+        .column-header .count {
+            background: #30363d; color: #8b949e; font-size: 12px;
+            padding: 2px 8px; border-radius: 10px; font-weight: 500;
+        }
+        .col-todo .column-header { border-top: 3px solid #da3633; border-radius: 10px 10px 0 0; }
+        .col-progress .column-header { border-top: 3px solid #d29922; border-radius: 10px 10px 0 0; }
+        .col-done .column-header { border-top: 3px solid #238636; border-radius: 10px 10px 0 0; }
+        .column-body { padding: 12px; min-height: 200px; }
+        .task-card {
+            background: #0d1117; border: 1px solid #30363d;
+            border-radius: 8px; padding: 14px 16px; margin-bottom: 10px;
+            cursor: grab; transition: border-color 0.2s, transform 0.15s;
+        }
+        .task-card:hover { border-color: #58a6ff; }
+        .task-card.private-task { border-left: 3px solid #6e40c9; }
+        .task-card.dragging { opacity: 0.5; transform: rotate(2deg); }
+        .task-card .task-title { font-weight: 600; font-size: 14px; margin-bottom: 8px; color: #f0f6fc; }
+        .task-card .task-tag {
+            display: inline-block; font-size: 10px; font-weight: 700;
+            padding: 2px 8px; border-radius: 10px;
+            background: linear-gradient(135deg, #f97316, #ef4444);
+            color: #fff; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        .task-card .task-private-badge {
+            display: inline-block; font-size: 10px; padding: 2px 7px;
+            border-radius: 10px; background: #2d1f4e; color: #bc8cff;
+            margin-left: 4px; margin-bottom: 6px;
+        }
+        .task-card .task-recurring {
+            display: inline-block; font-size: 10px; padding: 2px 6px;
+            border-radius: 10px; background: #2f3640; color: #8b949e;
+            margin-left: 4px; margin-bottom: 6px;
+        }
+        .task-card .task-desc {
+            font-size: 11px; color: #8b949e; margin-bottom: 6px;
+            line-height: 1.4; max-height: 44px; overflow: hidden;
+        }
+        .task-card .task-client { font-size: 12px; color: #8b949e; margin-bottom: 10px; }
+        .task-meta { display: flex; justify-content: space-between; align-items: center; }
+        .assignee-badge {
+            font-size: 11px; font-weight: 600; padding: 3px 10px;
+            border-radius: 12px; text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        .assignee-mitja { background: #1f3a5f; color: #58a6ff; }
+        .assignee-tim { background: #3b2f4a; color: #bc8cff; }
+        .assignee-marjan { background: #2a3b2a; color: #7ee787; }
+        .deadline { font-size: 12px; color: #8b949e; display: flex; align-items: center; gap: 4px; }
+        .deadline.overdue { color: #f85149; }
+        .deadline.soon { color: #d29922; }
+        .task-actions {
+            display: flex; gap: 6px; margin-top: 10px;
+            padding-top: 10px; border-top: 1px solid #21262d;
+        }
+        .task-actions button {
+            flex: 1; padding: 5px 8px; font-size: 11px;
+            border: 1px solid #30363d; border-radius: 4px;
+            background: #21262d; color: #8b949e; cursor: pointer; transition: all 0.2s;
+        }
+        .task-actions button:hover { background: #30363d; color: #e1e4e8; }
+        .task-actions .btn-delete:hover { background: #da3633; color: #fff; border-color: #da3633; }
+        .task-hours {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-top: 8px; padding-top: 8px; border-top: 1px solid #21262d;
+        }
+        .hours-display { font-size: 11px; color: #8b949e; }
+        .btn-log-hours {
+            font-size: 11px; padding: 3px 8px; border: 1px solid #388bfd;
+            border-radius: 4px; background: transparent; color: #388bfd;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .btn-log-hours:hover { background: #388bfd; color: #fff; }
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.6); z-index: 100; justify-content: center; align-items: center;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal {
+            background: #161b22; border: 1px solid #30363d; border-radius: 12px;
+            padding: 28px; width: 440px; max-width: 90vw; max-height: 90vh; overflow-y: auto;
+        }
+        .modal h2 { font-size: 18px; margin-bottom: 20px; color: #f0f6fc; }
+        .form-group { margin-bottom: 16px; }
+        .form-group label { display: block; font-size: 13px; color: #8b949e; margin-bottom: 6px; font-weight: 500; }
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%; padding: 8px 12px; background: #0d1117;
+            border: 1px solid #30363d; border-radius: 6px; color: #e1e4e8; font-size: 14px;
+        }
+        .form-group textarea { min-height: 70px; resize: vertical; font-family: inherit; }
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+            outline: none; border-color: #58a6ff;
+        }
+        .visibility-toggle { display: flex; gap: 8px; }
+        .vis-btn {
+            flex: 1; padding: 7px; border-radius: 6px; border: 1px solid #30363d;
+            background: #21262d; color: #8b949e; cursor: pointer; font-size: 13px; transition: all 0.2s;
+        }
+        .vis-btn.active-team { background: #1f3a5f; color: #58a6ff; border-color: #58a6ff; }
+        .vis-btn.active-private { background: #2d1f4e; color: #bc8cff; border-color: #6e40c9; }
+        .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 24px; }
+        .modal-actions button {
+            padding: 8px 18px; border-radius: 6px; font-size: 14px;
+            font-weight: 500; cursor: pointer; border: 1px solid #30363d;
+        }
+        .btn-cancel { background: #21262d; color: #e1e4e8; }
+        .btn-cancel:hover { background: #30363d; }
+        .btn-save { background: #238636; color: #fff; border-color: #238636; }
+        .btn-save:hover { background: #2ea043; }
+        .drop-zone { border: 2px dashed #58a6ff; border-radius: 8px; min-height: 60px; }
+        .filter-bar { padding: 12px 32px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+        .filter-btn {
+            padding: 5px 14px; border-radius: 16px; border: 1px solid #30363d;
+            background: #21262d; color: #8b949e; font-size: 13px; cursor: pointer; transition: all 0.2s;
+        }
+        .filter-btn:hover, .filter-btn.active {
+            background: #30363d; color: #f0f6fc; border-color: #58a6ff;
+        }
+        .loading-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(15,17,23,0.85); z-index: 200;
+            display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 16px;
+        }
+        .spinner {
+            width: 40px; height: 40px; border: 3px solid #30363d;
+            border-top-color: #58a6ff; border-radius: 50%; animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        /* Identity modal buttons */
+        .identity-btn {
+            width: 100%; padding: 13px; border-radius: 8px; font-size: 15px; font-weight: 600;
+            cursor: pointer; border: none; transition: opacity 0.2s;
+        }
+        .identity-btn:hover { opacity: 0.85; }
+        .identity-mitja { background: #1f3a5f; color: #58a6ff; border: 1px solid #388bfd; }
+        .identity-tim { background: #3b2f4a; color: #bc8cff; border: 1px solid #8957e5; }
+        .identity-marjan { background: #2a3b2a; color: #7ee787; border: 1px solid #56d364; }
+    </style>
+</head>
+<body>
+
+    <!-- Loading overlay -->
+    <div class="loading-overlay" id="loading-overlay">
+        <div class="spinner"></div>
+        <span style="color:#8b949e;font-size:14px;">Connecting to database…</span>
+    </div>
+
+    <!-- Identity modal -->
+    <div class="modal-overlay" id="identity-modal">
+        <div class="modal" style="max-width:320px;text-align:center;">
+            <h2 style="margin-bottom:8px;">👋 Who are you?</h2>
+            <p style="font-size:13px;color:#8b949e;margin-bottom:24px;">Your choice is saved in this browser.</p>
+            <div style="display:flex;flex-direction:column;gap:10px;">
+                <button class="identity-btn identity-mitja" onclick="setIdentity('Mitja')">Mitja</button>
+                <button class="identity-btn identity-tim" onclick="setIdentity('Tim')">Tim</button>
+                <button class="identity-btn identity-marjan" onclick="setIdentity('Marjan')">Marjan</button>
+            </div>
+        </div>
+    </div>
+
+    <header>
+        <h1>Task Manager</h1>
+        <div class="header-right">
+            <span id="current-user-badge" class="assignee-badge" style="display:none;"></span>
+            <span class="switch-user-link" id="switch-user-link" style="display:none;" onclick="clearIdentity()">Switch user</span>
+            <button class="btn-add" onclick="openModal()">+ New Task</button>
+        </div>
+    </header>
+
+    <div class="filter-bar">
+        <span style="font-size:13px;color:#8b949e;margin-right:4px;">Assignee:</span>
+        <button class="filter-btn active" data-filter="assignee" onclick="filterByAssignee('all', this)">All</button>
+        <button class="filter-btn" data-filter="assignee" onclick="filterByAssignee('Mitja', this)">Mitja</button>
+        <button class="filter-btn" data-filter="assignee" onclick="filterByAssignee('Tim', this)">Tim</button>
+        <button class="filter-btn" data-filter="assignee" onclick="filterByAssignee('Marjan', this)">Marjan</button>
+        <span style="font-size:13px;color:#8b949e;margin-left:16px;margin-right:4px;">Client:</span>
+        <select id="client-dropdown" onchange="filterByClient(this.value)" style="padding:5px 12px;border-radius:16px;border:1px solid #30363d;background:#21262d;color:#8b949e;font-size:13px;cursor:pointer;outline:none;">
+            <option value="all">All Clients</option>
+        </select>
+    </div>
+
+    <div class="board">
+        <div class="column col-todo" data-status="todo">
+            <div class="column-header">To Do <span class="count" id="count-todo">0</span></div>
+            <div class="column-body" id="col-todo" ondrop="drop(event)" ondragover="allowDrop(event)" ondragleave="dragLeave(event)"></div>
+        </div>
+        <div class="column col-progress" data-status="progress">
+            <div class="column-header">In Progress <span class="count" id="count-progress">0</span></div>
+            <div class="column-body" id="col-progress" ondrop="drop(event)" ondragover="allowDrop(event)" ondragleave="dragLeave(event)"></div>
+        </div>
+        <div class="column col-done" data-status="done">
+            <div class="column-header">Done <span class="count" id="count-done">0</span></div>
+            <div class="column-body" id="col-done" ondrop="drop(event)" ondragover="allowDrop(event)" ondragleave="dragLeave(event)"></div>
+        </div>
+    </div>
+
+    <!-- Task Modal -->
+    <div class="modal-overlay" id="modal">
+        <div class="modal">
+            <h2 id="modal-title">New Task</h2>
+            <div class="form-group">
+                <label>Task Name</label>
+                <input type="text" id="taskName" placeholder="Enter task name…">
+            </div>
+            <div class="form-group">
+                <label>Client</label>
+                <select id="taskClient"></select>
+            </div>
+            <div class="form-group">
+                <label>Assignee</label>
+                <select id="taskAssignee">
+                    <option value="Mitja">Mitja</option>
+                    <option value="Tim">Tim</option>
+                    <option value="Marjan">Marjan</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Deadline</label>
+                <input type="date" id="taskDeadline">
+            </div>
+            <div class="form-group">
+                <label>Status</label>
+                <select id="taskStatus">
+                    <option value="todo">To Do</option>
+                    <option value="progress">In Progress</option>
+                    <option value="done">Done</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Description</label>
+                <textarea id="taskDescription" placeholder="Optional notes…"></textarea>
+            </div>
+            <div class="form-group">
+                <label>Hours Logged</label>
+                <input type="number" id="taskHours" min="0" step="0.5" placeholder="0">
+            </div>
+            <div class="form-group">
+                <label>Visibility</label>
+                <div class="visibility-toggle">
+                    <button type="button" class="vis-btn active-team" id="vis-team" onclick="setVisibility('team')">🌍 Team</button>
+                    <button type="button" class="vis-btn" id="vis-private" onclick="setVisibility('private')">🔒 Private</button>
+                </div>
+                <input type="hidden" id="taskVisibility" value="team">
+            </div>
+            <div class="modal-actions">
+                <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+                <button class="btn-save" onclick="saveTask()">Save Task</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ─── Supabase init ────────────────────────────────────────────────────
+        const SUPABASE_URL  = 'https://jhtyrdvdgavpqmbqtuyv.supabase.co';
+        const SUPABASE_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpodHlyZHZkZ2F2cHFtYnF0dXl2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE4Mzk0MjksImV4cCI6MjA3NzQxNTQyOX0.9PtdVBmV_DndB9mfZfw3r6BocQOeattQBSQ6X4ubYeg';
+        const { createClient } = supabase;
+        const db = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        // ─── State ────────────────────────────────────────────────────────────
+        let currentUser = null;
+        let tasks = [];
+        let editingId = null;
+        let currentFilterAssignee = 'all';
+        let currentFilterClient = 'all';
+
+        const allClients = ['2friends','DeltaHub','FJN d.o.o.','Komunala','NutriSolution',
+            'Provantis','Sensilab','Vantis','Vendio','Vitapur AI','Vitapur Amazon','Vitapur B2B'];
+
+        // ─── Identity ────────────────────────────────────────────────────────
+        function setIdentity(name) {
+            localStorage.setItem('taskmanager_user', name);
+            currentUser = name;
+            document.getElementById('identity-modal').classList.remove('active');
+            const badge = document.getElementById('current-user-badge');
+            badge.textContent = name;
+            badge.className = `assignee-badge assignee-${name.toLowerCase()}`;
+            badge.style.display = '';
+            document.getElementById('switch-user-link').style.display = '';
+            const assigneeSelect = document.getElementById('taskAssignee');
+            if (name !== 'Mitja') {
+                assigneeSelect.value = name;
+                assigneeSelect.disabled = true;
+            } else {
+                assigneeSelect.disabled = false;
+            }
+            init();
+        }
+
+        function clearIdentity() {
+            localStorage.removeItem('taskmanager_user');
+            location.reload();
+        }
+
+        // ─── Init ─────────────────────────────────────────────────────────────
+        async function init() {
+            document.getElementById('loading-overlay').style.display = 'flex';
+            await fetchTasks();
+            subscribeToChanges();
+            document.getElementById('loading-overlay').style.display = 'none';
+        }
+
+        // ─── Fetch ────────────────────────────────────────────────────────────
+        async function fetchTasks() {
+            const { data, error } = await db.from('tasks').select('*').order('created_at');
+            if (error) { console.error('Fetch error:', error); return; }
+            // Private tasks: only show own private tasks
+            tasks = data.filter(t =>
+                t.visibility !== 'private' || t.assignee === currentUser
+            );
+            renderTasks();
+        }
+
+        // ─── Real-time ────────────────────────────────────────────────────────
+        function subscribeToChanges() {
+            db.channel('tasks-realtime')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' },
+                    () => fetchTasks())
+                .subscribe();
+        }
+
+        // ─── Save task ────────────────────────────────────────────────────────
+        async function saveTask() {
+            const name        = document.getElementById('taskName').value.trim();
+            const client      = document.getElementById('taskClient').value;
+            const assignee    = document.getElementById('taskAssignee').value;
+            const deadline    = document.getElementById('taskDeadline').value;
+            const status      = document.getElementById('taskStatus').value;
+            const hours       = parseFloat(document.getElementById('taskHours').value) || 0;
+            const visibility  = document.getElementById('taskVisibility').value;
+            const description = document.getElementById('taskDescription').value.trim();
+
+            if (!name || !client || !deadline) { alert('Please fill in Task Name, Client, and Deadline.'); return; }
+            if (currentUser !== 'Mitja' && assignee !== currentUser) {
+                alert('You can only create tasks assigned to yourself.'); return;
+            }
+
+            if (editingId) {
+                const task = tasks.find(t => t.id === editingId);
+                if (task && currentUser !== 'Mitja' && task.assignee !== currentUser) {
+                    alert('You can only edit your own tasks.'); return;
+                }
+                const { error } = await db.from('tasks')
+                    .update({ name, client, assignee, deadline, status, hours, visibility, description })
+                    .eq('id', editingId);
+                if (error) { console.error(error); alert('Error saving: ' + error.message); return; }
+            } else {
+                const { error } = await db.from('tasks')
+                    .insert([{ name, client, assignee, deadline, status, hours, visibility, description }]);
+                if (error) { console.error(error); alert('Error saving: ' + error.message); return; }
+            }
+            closeModal();
+        }
+
+        // ─── Edit task ────────────────────────────────────────────────────────
+        function editTask(id) {
+            const task = tasks.find(t => t.id === id);
+            if (!task) return;
+            editingId = id;
+            document.getElementById('modal-title').textContent = 'Edit Task';
+            document.getElementById('taskName').value = task.name;
+            populateClientSelect(task.client);
+            document.getElementById('taskAssignee').value = task.assignee;
+            document.getElementById('taskDeadline').value = task.deadline;
+            document.getElementById('taskStatus').value = task.status;
+            document.getElementById('taskHours').value = task.hours || 0;
+            document.getElementById('taskDescription').value = task.description || '';
+            setVisibility(task.visibility || 'team');
+            document.getElementById('modal').classList.add('active');
+        }
+
+        // ─── Delete task ──────────────────────────────────────────────────────
+        async function deleteTask(id) {
+            if (currentUser !== 'Mitja') { alert('Only Mitja can delete tasks.'); return; }
+            if (!confirm('Delete this task?')) return;
+            const { error } = await db.from('tasks').delete().eq('id', id);
+            if (error) console.error(error);
+        }
+
+        // ─── Move task ────────────────────────────────────────────────────────
+        async function moveTask(id, dir) {
+            const task = tasks.find(t => t.id === id);
+            if (!task) return;
+            if (currentUser !== 'Mitja' && task.assignee !== currentUser) {
+                alert('You can only move your own tasks.'); return;
+            }
+            const order = ['todo', 'progress', 'done'];
+            const idx = order.indexOf(task.status);
+            let newStatus = task.status;
+            if (dir === 'next' && idx < 2) newStatus = order[idx + 1];
+            if (dir === 'prev' && idx > 0) newStatus = order[idx - 1];
+            if (newStatus === task.status) return;
+            const { error } = await db.from('tasks').update({ status: newStatus }).eq('id', id);
+            if (error) console.error(error);
+        }
+
+        // ─── Log hours ────────────────────────────────────────────────────────
+        async function logHours(id) {
+            const task = tasks.find(t => t.id === id);
+            if (!task) return;
+            if (currentUser !== 'Mitja' && task.assignee !== currentUser) {
+                alert('You can only log hours on your own tasks.'); return;
+            }
+            const current = task.hours || 0;
+            const add = parseFloat(prompt(`Log hours for "${task.name}"\nCurrently logged: ${current}h\n\nAdd hours:`, ''));
+            if (isNaN(add) || add <= 0) return;
+            const newHours = Math.round((current + add) * 10) / 10;
+            const { error } = await db.from('tasks').update({ hours: newHours }).eq('id', id);
+            if (error) console.error(error);
+        }
+
+        // ─── Drag & drop ──────────────────────────────────────────────────────
+        function dragStart(e) {
+            e.dataTransfer.setData('text/plain', e.target.dataset.id);
+            e.target.classList.add('dragging');
+        }
+        function allowDrop(e) { e.preventDefault(); e.currentTarget.classList.add('drop-zone'); }
+        function dragLeave(e) { e.currentTarget.classList.remove('drop-zone'); }
+        async function drop(e) {
+            e.preventDefault();
+            e.currentTarget.classList.remove('drop-zone');
+            const id = e.dataTransfer.getData('text/plain');
+            const status = e.currentTarget.id.replace('col-', '');
+            const task = tasks.find(t => t.id === id);
+            if (!task) return;
+            if (currentUser !== 'Mitja' && task.assignee !== currentUser) {
+                alert('You can only move your own tasks.'); return;
+            }
+            const { error } = await db.from('tasks').update({ status }).eq('id', id);
+            if (error) console.error(error);
+        }
+
+        // ─── Filters ──────────────────────────────────────────────────────────
+        function filterByAssignee(filter, btn) {
+            currentFilterAssignee = filter;
+            document.querySelectorAll('[data-filter="assignee"]').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            renderTasks();
+        }
+        function filterByClient(filter) {
+            currentFilterClient = filter;
+            renderTasks();
+        }
+
+        // ─── Visibility toggle ────────────────────────────────────────────────
+        function setVisibility(val) {
+            document.getElementById('taskVisibility').value = val;
+            document.getElementById('vis-team').className = 'vis-btn' + (val === 'team' ? ' active-team' : '');
+            document.getElementById('vis-private').className = 'vis-btn' + (val === 'private' ? ' active-private' : '');
+        }
+
+        // ─── Modal open / close ───────────────────────────────────────────────
+        function openModal() {
+            editingId = null;
+            document.getElementById('modal-title').textContent = 'New Task';
+            document.getElementById('taskName').value = '';
+            document.getElementById('taskDescription').value = '';
+            populateClientSelect('');
+            const assigneeSelect = document.getElementById('taskAssignee');
+            if (currentUser !== 'Mitja') { assigneeSelect.value = currentUser; assigneeSelect.disabled = true; }
+            else { assigneeSelect.value = 'Mitja'; assigneeSelect.disabled = false; }
+            document.getElementById('taskDeadline').value = '';
+            document.getElementById('taskStatus').value = 'todo';
+            document.getElementById('taskHours').value = 0;
+            setVisibility('team');
+            document.getElementById('modal').classList.add('active');
+        }
+        function closeModal() {
+            document.getElementById('modal').classList.remove('active');
+            editingId = null;
+        }
+
+        // ─── Helpers ──────────────────────────────────────────────────────────
+        function formatDate(dateStr) {
+            const d = new Date(dateStr + 'T00:00:00');
+            return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+        }
+        function getDeadlineClass(dateStr) {
+            const today = new Date(); today.setHours(0,0,0,0);
+            const deadline = new Date(dateStr + 'T00:00:00');
+            const diff = (deadline - today) / (1000 * 60 * 60 * 24);
+            if (diff < 0) return 'overdue';
+            if (diff <= 3) return 'soon';
+            return '';
+        }
+        function populateClientSelect(selected) {
+            const taskClients = [...new Set(tasks.map(t => t.client))];
+            const clients = [...new Set([...allClients, ...taskClients])].sort();
+            const sel = document.getElementById('taskClient');
+            sel.innerHTML = clients.map(c =>
+                `<option value="${escHtml(c)}"${c === selected ? ' selected' : ''}>${escHtml(c)}</option>`
+            ).join('');
+        }
+        function renderClientFilters() {
+            const taskClients = [...new Set(tasks.map(t => t.client))];
+            const clients = [...new Set([...allClients, ...taskClients])].sort();
+            const dropdown = document.getElementById('client-dropdown');
+            dropdown.innerHTML = '<option value="all">All Clients</option>' +
+                clients.map(c =>
+                    `<option value="${escHtml(c)}"${currentFilterClient === c ? ' selected' : ''}>${escHtml(c)}</option>`
+                ).join('');
+        }
+        function escHtml(str) {
+            if (!str) return '';
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        // ─── Render ───────────────────────────────────────────────────────────
+        function renderTasks() {
+            renderClientFilters();
+            ['todo', 'progress', 'done'].forEach(status => {
+                const col = document.getElementById('col-' + status);
+                const filtered = tasks.filter(t =>
+                    t.status === status
+                    && (currentFilterAssignee === 'all' || t.assignee === currentFilterAssignee)
+                    && (currentFilterClient === 'all' || t.client === currentFilterClient)
+                );
+                const canEdit = (id, assignee) => currentUser === 'Mitja' || assignee === currentUser;
+                const canDelete = () => currentUser === 'Mitja';
+
+                col.innerHTML = filtered.map(t => `
+                    <div class="task-card${t.visibility === 'private' ? ' private-task' : ''}"
+                         draggable="true" ondragstart="dragStart(event)" data-id="${t.id}">
+                        ${t.tag ? `<span class="task-tag">${escHtml(t.tag)}</span>` : ''}
+                        ${t.visibility === 'private' ? `<span class="task-private-badge">🔒 Private</span>` : ''}
+                        ${t.recurring ? `<span class="task-recurring">🔁 ${t.recurring}</span>` : ''}
+                        <div class="task-title">${escHtml(t.name)}</div>
+                        ${t.description ? `<div class="task-desc">${escHtml(t.description)}</div>` : ''}
+                        <div class="task-client">${escHtml(t.client)}</div>
+                        <div class="task-meta">
+                            <span class="assignee-badge assignee-${t.assignee.toLowerCase()}">${escHtml(t.assignee)}</span>
+                            <span class="deadline ${getDeadlineClass(t.deadline)}">
+                                <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+                                    <path d="M8 0a8 8 0 110 16A8 8 0 018 0zm0 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM8 3a.75.75 0 01.75.75v3.69l2.28 2.28a.75.75 0 01-1.06 1.06l-2.5-2.5A.75.75 0 017.25 8V3.75A.75.75 0 018 3z"/>
+                                </svg>
+                                ${formatDate(t.deadline)}
+                            </span>
+                        </div>
+                        <div class="task-hours">
+                            <span class="hours-display">⏱ ${t.hours ? t.hours + 'h logged' : '0h logged'}</span>
+                            <button class="btn-log-hours" onclick="logHours('${t.id}')">+ Log Hours</button>
+                        </div>
+                        <div class="task-actions">
+                            <button onclick="moveTask('${t.id}', 'prev')">&#9664;</button>
+                            ${canEdit(t.id, t.assignee) ? `<button onclick="editTask('${t.id}')">Edit</button>` : ''}
+                            ${canDelete() ? `<button class="btn-delete" onclick="deleteTask('${t.id}')">Delete</button>` : ''}
+                            <button onclick="moveTask('${t.id}', 'next')">&#9654;</button>
+                        </div>
+                    </div>
+                `).join('');
+                document.getElementById('count-' + status).textContent = filtered.length;
+            });
+        }
+
+        // ─── Event listeners ──────────────────────────────────────────────────
+        document.getElementById('modal').addEventListener('click', function(e) {
+            if (e.target === this) closeModal();
+        });
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') closeModal();
+        });
+
+        // ─── Boot ─────────────────────────────────────────────────────────────
+        window.addEventListener('DOMContentLoaded', () => {
+            const saved = localStorage.getItem('taskmanager_user');
+            if (saved) {
+                setIdentity(saved);
+            } else {
+                document.getElementById('loading-overlay').style.display = 'none';
+                document.getElementById('identity-modal').classList.add('active');
+            }
+        });
+    </script>
+</body>
+</html>
