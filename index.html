@@ -37,12 +37,15 @@
         }
         .column {
             background: #161b22; border-radius: 10px;
-            border: 1px solid #30363d; min-height: 70vh;
+            border: 1px solid #30363d;
+            display: flex; flex-direction: column;
+            height: 75vh;
         }
         .column-header {
             padding: 16px 20px; border-bottom: 1px solid #30363d;
             display: flex; align-items: center; gap: 10px;
             font-weight: 600; font-size: 15px;
+            flex-shrink: 0;
         }
         .column-header .count {
             background: #30363d; color: #8b949e; font-size: 12px;
@@ -51,7 +54,7 @@
         .col-todo .column-header { border-top: 3px solid #da3633; border-radius: 10px 10px 0 0; }
         .col-progress .column-header { border-top: 3px solid #d29922; border-radius: 10px 10px 0 0; }
         .col-done .column-header { border-top: 3px solid #238636; border-radius: 10px 10px 0 0; }
-        .column-body { padding: 12px; min-height: 200px; }
+        .column-body { padding: 12px; flex: 1; overflow-y: auto; }
         .task-card {
             background: #0d1117; border: 1px solid #30363d;
             border-radius: 8px; padding: 14px 16px; margin-bottom: 10px;
