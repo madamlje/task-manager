@@ -32,8 +32,8 @@
         }
         .btn-add:hover { background: #2ea043; }
         .board {
-            display: grid; grid-template-columns: 1fr 1fr 1fr;
-            gap: 20px; padding: 24px 32px; max-width: 1400px; margin: 0 auto;
+            display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 20px; padding: 24px 32px; max-width: 1400px; width: 100%; margin: 0 auto; box-sizing: border-box;
         }
         .column {
             background: #161b22; border-radius: 10px;
