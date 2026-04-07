@@ -359,7 +359,7 @@
             badge.style.display = '';
             document.getElementById('switch-user-link').style.display = '';
             const assigneeSelect = document.getElementById('taskAssignee');
-            if (name !== 'Mitja') {
+            if (name === 'Marjan') {
                 assigneeSelect.value = name;
                 assigneeSelect.disabled = true;
             } else {
@@ -412,14 +412,20 @@
             const description = document.getElementById('taskDescription').value.trim();
 
             if (!name || !client || !deadline) { alert('Please fill in Task Name, Client, and Deadline.'); return; }
-            if (currentUser !== 'Mitja' && assignee !== currentUser) {
+            if (currentUser === 'Marjan' && assignee !== currentUser) {
                 alert('You can only create tasks assigned to yourself.'); return;
+            }
+            if (currentUser === 'Tim' && assignee !== 'Tim' && assignee !== 'Mitja') {
+                alert('You can only assign tasks to yourself or Mitja.'); return;
             }
 
             if (editingId) {
                 const task = tasks.find(t => t.id === editingId);
-                if (task && currentUser !== 'Mitja' && task.assignee !== currentUser) {
+                if (task && currentUser === 'Marjan' && task.assignee !== currentUser) {
                     alert('You can only edit your own tasks.'); return;
+                }
+                if (task && currentUser === 'Tim' && task.assignee !== 'Tim' && task.assignee !== 'Mitja') {
+                    alert('You can only edit your own tasks or tasks assigned to Mitja.'); return;
                 }
                 const { error } = await db.from('tasks')
                     .update({ name, client, assignee, deadline, status, hours, visibility, description })
@@ -538,8 +544,8 @@
             document.getElementById('taskDescription').value = '';
             populateClientSelect('');
             const assigneeSelect = document.getElementById('taskAssignee');
-            if (currentUser !== 'Mitja') { assigneeSelect.value = currentUser; assigneeSelect.disabled = true; }
-            else { assigneeSelect.value = 'Mitja'; assigneeSelect.disabled = false; }
+            if (currentUser === 'Marjan') { assigneeSelect.value = currentUser; assigneeSelect.disabled = true; }
+            else { assigneeSelect.value = currentUser; assigneeSelect.disabled = false; }
             document.getElementById('taskDeadline').value = '';
             document.getElementById('taskStatus').value = 'todo';
             document.getElementById('taskHours').value = 0;
