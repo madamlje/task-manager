@@ -323,12 +323,15 @@
         let editingId = null;
         let currentFilterAssignee = 'all';
         let currentFilterClient = 'all';
+        let marjanMode = false; // restricted view for Marjan's own password
 
         const allClients = ['2friends','DeltaHub','FJN d.o.o.','Komunala','NutriSolution',
             'Provantis','Sensilab','Vantis','Vendio','Vitapur AI','Vitapur Amazon','Vitapur B2B'];
+        const MARJAN_CLIENTS = ['Komunala','Vendio','Vitapur B2B'];
 
         // ─── Password gate ───────────────────────────────────────────────
-        const PASSWORD_HASH = 'e402d6991a420338a69ce4d8ef57d02d81973236f48500ce9e381e24d48f4d74';
+        const PASSWORD_HASH       = 'e402d6991a420338a69ce4d8ef57d02d81973236f48500ce9e381e24d48f4d74';
+        const MARJAN_PASSWORD_HASH = 'c788485898df05ec113dae9c1ef8d2617cd4537ee28462443d7e48c3b0c9e6cd';
 
         async function checkPassword() {
             const input = document.getElementById('password-input').value;
@@ -336,12 +339,21 @@
             const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
             const hashArray = Array.from(new Uint8Array(hashBuffer));
             const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
             if (hashHex === PASSWORD_HASH) {
+                // Main password — full access
                 sessionStorage.setItem('tm_auth', '1');
+                sessionStorage.removeItem('tm_marjan');
                 document.getElementById('password-modal').classList.remove('active');
                 const saved = localStorage.getItem('taskmanager_user');
                 if (saved) { setIdentity(saved); }
                 else { document.getElementById('identity-modal').classList.add('active'); }
+            } else if (hashHex === MARJAN_PASSWORD_HASH) {
+                // Marjan's password — restricted to Marjan identity + limited clients
+                sessionStorage.setItem('tm_auth', '1');
+                sessionStorage.setItem('tm_marjan', '1');
+                document.getElementById('password-modal').classList.remove('active');
+                setIdentity('Marjan');
             } else {
                 document.getElementById('password-error').textContent = 'Incorrect password. Try again.';
                 document.getElementById('password-input').value = '';
@@ -350,6 +362,12 @@
 
         // ─── Identity ────────────────────────────────────────────────────────
         function setIdentity(name) {
+            marjanMode = sessionStorage.getItem('tm_marjan') === '1';
+            // If Marjan mode — lock identity to Marjan, hide switch
+            if (marjanMode) {
+                name = 'Marjan';
+                document.getElementById('switch-user-link').style.display = 'none';
+            }
             localStorage.setItem('taskmanager_user', name);
             currentUser = name;
             document.getElementById('identity-modal').classList.remove('active');
@@ -357,12 +375,16 @@
             badge.textContent = name;
             badge.className = `assignee-badge assignee-${name.toLowerCase()}`;
             badge.style.display = '';
-            document.getElementById('switch-user-link').style.display = '';
+            if (!marjanMode) document.getElementById('switch-user-link').style.display = '';
             const assigneeSelect = document.getElementById('taskAssignee');
+            // Marjan can assign to himself or Mitja
             if (name === 'Marjan') {
-                assigneeSelect.value = name;
-                assigneeSelect.disabled = true;
+                assigneeSelect.innerHTML = '<option value="Marjan">Marjan</option><option value="Mitja">Mitja</option>';
+                assigneeSelect.value = 'Marjan';
+                assigneeSelect.disabled = false;
             } else {
+                assigneeSelect.innerHTML = '<option value="Mitja">Mitja</option><option value="Tim">Tim</option><option value="Marjan">Marjan</option>';
+                assigneeSelect.value = name;
                 assigneeSelect.disabled = false;
             }
             init();
@@ -386,9 +408,12 @@
             const { data, error } = await db.from('tasks').select('*').order('created_at');
             if (error) { console.error('Fetch error:', error); return; }
             // Private tasks: only show own private tasks
-            tasks = data.filter(t =>
-                t.visibility !== 'private' || t.assignee === currentUser
-            );
+            tasks = data.filter(t => {
+                if (t.visibility === 'private' && t.assignee !== currentUser) return false;
+                // Marjan mode: only show tasks for allowed clients
+                if (marjanMode && !MARJAN_CLIENTS.includes(t.client)) return false;
+                return true;
+            });
             renderTasks();
         }
 
@@ -412,17 +437,21 @@
             const description = document.getElementById('taskDescription').value.trim();
 
             if (!name || !client || !deadline) { alert('Please fill in Task Name, Client, and Deadline.'); return; }
-            if (currentUser === 'Marjan' && assignee !== currentUser) {
-                alert('You can only create tasks assigned to yourself.'); return;
+            if (currentUser === 'Marjan' && assignee !== 'Marjan' && assignee !== 'Mitja') {
+                alert('You can only assign tasks to yourself or Mitja.'); return;
             }
             if (currentUser === 'Tim' && assignee !== 'Tim' && assignee !== 'Mitja') {
                 alert('You can only assign tasks to yourself or Mitja.'); return;
             }
+            // In Marjan mode, restrict client to allowed list
+            if (marjanMode && !MARJAN_CLIENTS.includes(client)) {
+                alert('You can only create tasks for Vitapur B2B, Komunala or Vendio.'); return;
+            }
 
             if (editingId) {
                 const task = tasks.find(t => t.id === editingId);
-                if (task && currentUser === 'Marjan' && task.assignee !== currentUser) {
-                    alert('You can only edit your own tasks.'); return;
+                if (task && currentUser === 'Marjan' && task.assignee !== 'Marjan' && task.assignee !== 'Mitja') {
+                    alert('You can only edit your own tasks or tasks assigned to Mitja.'); return;
                 }
                 if (task && currentUser === 'Tim' && task.assignee !== 'Tim' && task.assignee !== 'Mitja') {
                     alert('You can only edit your own tasks or tasks assigned to Mitja.'); return;
@@ -544,8 +573,15 @@
             document.getElementById('taskDescription').value = '';
             populateClientSelect('');
             const assigneeSelect = document.getElementById('taskAssignee');
-            if (currentUser === 'Marjan') { assigneeSelect.value = currentUser; assigneeSelect.disabled = true; }
-            else { assigneeSelect.value = currentUser; assigneeSelect.disabled = false; }
+            if (currentUser === 'Marjan') {
+                assigneeSelect.innerHTML = '<option value="Marjan">Marjan</option><option value="Mitja">Mitja</option>';
+                assigneeSelect.value = 'Marjan';
+                assigneeSelect.disabled = false;
+            } else {
+                assigneeSelect.innerHTML = '<option value="Mitja">Mitja</option><option value="Tim">Tim</option><option value="Marjan">Marjan</option>';
+                assigneeSelect.value = currentUser;
+                assigneeSelect.disabled = false;
+            }
             document.getElementById('taskDeadline').value = '';
             document.getElementById('taskStatus').value = 'todo';
             document.getElementById('taskHours').value = 0;
@@ -571,16 +607,18 @@
             return '';
         }
         function populateClientSelect(selected) {
+            const base = marjanMode ? MARJAN_CLIENTS : allClients;
             const taskClients = [...new Set(tasks.map(t => t.client))];
-            const clients = [...new Set([...allClients, ...taskClients])].sort();
+            const clients = [...new Set([...base, ...taskClients.filter(c => base.includes(c) || !marjanMode)])].sort();
             const sel = document.getElementById('taskClient');
             sel.innerHTML = clients.map(c =>
                 `<option value="${escHtml(c)}"${c === selected ? ' selected' : ''}>${escHtml(c)}</option>`
             ).join('');
         }
         function renderClientFilters() {
+            const base = marjanMode ? MARJAN_CLIENTS : allClients;
             const taskClients = [...new Set(tasks.map(t => t.client))];
-            const clients = [...new Set([...allClients, ...taskClients])].sort();
+            const clients = [...new Set([...base, ...taskClients.filter(c => base.includes(c) || !marjanMode)])].sort();
             const dropdown = document.getElementById('client-dropdown');
             dropdown.innerHTML = '<option value="all">All Clients</option>' +
                 clients.map(c =>
@@ -654,9 +692,14 @@
             document.getElementById('loading-overlay').style.display = 'none';
             if (sessionStorage.getItem('tm_auth') === '1') {
                 document.getElementById('password-modal').classList.remove('active');
-                const saved = localStorage.getItem('taskmanager_user');
-                if (saved) { setIdentity(saved); }
-                else { document.getElementById('identity-modal').classList.add('active'); }
+                const isMarjanSession = sessionStorage.getItem('tm_marjan') === '1';
+                if (isMarjanSession) {
+                    setIdentity('Marjan');
+                } else {
+                    const saved = localStorage.getItem('taskmanager_user');
+                    if (saved) { setIdentity(saved); }
+                    else { document.getElementById('identity-modal').classList.add('active'); }
+                }
             } else {
                 document.getElementById('password-modal').classList.add('active');
                 setTimeout(() => document.getElementById('password-input').focus(), 100);
